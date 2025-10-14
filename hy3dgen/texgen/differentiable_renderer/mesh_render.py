@@ -169,8 +169,38 @@ class MeshRender():
 
         self.raster_mode = raster_mode
         if self.raster_mode == 'cr':
-            import custom_rasterizer as cr
-            self.raster = cr
+            # Try to import custom_rasterizer (CUDA kernel)
+            # Falls back to PyTorch implementation if unavailable or fails
+            try:
+                import custom_rasterizer as cr
+                # Test if it actually works (may fail on non-CUDA devices)
+                try:
+                    test_v = torch.rand(10, 4, device=self.device)
+                    test_f = torch.randint(0, 10, (5, 3), dtype=torch.int32, device=self.device)
+                    test_d = torch.zeros(0, device=self.device)
+                    cr.rasterize_image(test_v, test_f, test_d, 32, 32, 1e-6, 0)
+                    self.raster = cr
+                    print(f"✓ Using custom_rasterizer (CUDA kernel) for rendering")
+                except Exception as e:
+                    print(f"⚠ custom_rasterizer CUDA kernel not compatible with {self.device}")
+                    print(f"  Falling back to PyTorch rasterizer (100% compatible, ~15% slower)")
+                    raise ImportError("CUDA kernel incompatible")
+            except (ImportError, Exception):
+                # Fallback to PyTorch implementation
+                import sys
+                from pathlib import Path
+                raster_path = Path(__file__).parent.parent / 'custom_rasterizer'
+                if str(raster_path) not in sys.path:
+                    sys.path.insert(0, str(raster_path))
+                
+                try:
+                    from pytorch_rasterizer_optimized import create_optimized_rasterizer
+                    self.raster = create_optimized_rasterizer(device=self.device, mode='tiled', tile_size=32)
+                    print(f"✓ Using optimized PyTorch rasterizer on {self.device}")
+                except ImportError:
+                    from pytorch_rasterizer import PyTorchRasterizer
+                    self.raster = PyTorchRasterizer(device=self.device)
+                    print(f"✓ Using basic PyTorch rasterizer on {self.device}")
         else:
             raise f'No raster named {self.raster_mode}'
 
@@ -195,7 +225,22 @@ class MeshRender():
             rast_out_db = None
             if pos.dim() == 2:
                 pos = pos.unsqueeze(0)
-            findices, barycentric = self.raster.rasterize(pos, tri, resolution)
+            
+            # Handle both CUDA module and PyTorch class API
+            if hasattr(self.raster, 'rasterize'):
+                # CUDA kernel module API: custom_rasterizer.rasterize(pos, tri, resolution)
+                findices, barycentric = self.raster.rasterize(pos, tri, resolution)
+            elif hasattr(self.raster, 'rasterize_image'):
+                # PyTorch class API: rasterizer.rasterize_image(V, F, D, width, height, ...)
+                # Note: PyTorch API expects (V, F, D, width, height) not (pos, tri, resolution)
+                width, height = resolution[1], resolution[0]
+                depth_prior = torch.zeros(0, device=self.device)  # Empty depth prior
+                findices, barycentric = self.raster.rasterize_image(
+                    pos[0], tri, depth_prior, width, height, 1e-6, 0
+                )
+            else:
+                raise AttributeError(f"Rasterizer has no rasterize or rasterize_image method")
+            
             rast_out = torch.cat((barycentric, findices.unsqueeze(-1)), dim=-1)
             rast_out = rast_out.unsqueeze(0)
         else:

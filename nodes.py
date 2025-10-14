@@ -9,7 +9,13 @@ import json
 import trimesh as Trimesh
 from tqdm import tqdm
 
-from device_utils import safe_cuda_call
+# Import cross-platform device utilities
+try:
+    # Try relative import first (when used as part of ComfyUI plugin)
+    from .device_utils import safe_cuda_call
+except (ImportError, ValueError):
+    # Fallback to direct import (when in same directory)
+    from device_utils import safe_cuda_call
 
 from .hy3dgen.shapegen import Hunyuan3DDiTFlowMatchingPipeline, FaceReducer, FloaterRemover, DegenerateFaceRemover
 from .hy3dgen.texgen.hunyuanpaint.unet.modules import UNet2DConditionModel, UNet2p5DConditionModel

@@ -26,9 +26,12 @@ This approach:
 
 ## Files Fixed (12 files)
 
-### Root Level Files (2 files) - Already Working ✅
-- `nodes.py` - Direct import works (same directory as device_utils.py)
-- `utils.py` - Direct import works (same directory as device_utils.py)
+### Root Level Files (2 files) - NOW FIXED WITH FALLBACK ✅
+- `nodes.py` - Added try/except fallback for relative import
+- `utils.py` - Added try/except fallback for relative import
+
+**Why root files also need fallback:**
+Even though `device_utils.py` is in the same directory, ComfyUI's plugin loading mechanism may not have the plugin directory in `sys.path` when these modules are first imported. The try/except pattern ensures they work in all contexts.
 
 ### Nested Files Fixed (10 files) - Now with Fallback Imports ✅
 

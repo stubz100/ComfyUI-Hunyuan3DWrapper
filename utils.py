@@ -3,7 +3,15 @@ import torch
 import logging
 import numpy as np
 import trimesh
-from device_utils import get_device, safe_cuda_call
+
+# Import cross-platform device utilities
+try:
+    # Try relative import first (when used as part of ComfyUI plugin)
+    from .device_utils import get_device, safe_cuda_call
+except (ImportError, ValueError):
+    # Fallback to direct import (when in same directory)
+    from device_utils import get_device, safe_cuda_call
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 log = logging.getLogger(__name__)
 
