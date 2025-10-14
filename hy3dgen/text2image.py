@@ -32,9 +32,14 @@ import numpy as np
 import torch
 from diffusers import AutoPipelineForText2Image
 
-# Add parent directory to path to import device_utils
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-from device_utils import get_device
+# Import cross-platform device utilities
+try:
+    # Try relative import first (when used as part of ComfyUI plugin)
+    from ..device_utils import get_device
+except (ImportError, ValueError):
+    # Fallback to absolute import (when used standalone)
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from device_utils import get_device
 
 
 def seed_everything(seed):

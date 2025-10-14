@@ -25,9 +25,14 @@ from pytorch_lightning.callbacks import Callback
 from functools import wraps
 
 # Import cross-platform device utilities
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
-from device_utils import safe_cuda_call
+try:
+    # Try relative import first (when used as part of ComfyUI plugin)
+    from .....device_utils import safe_cuda_call
+except (ImportError, ValueError):
+    # Fallback to absolute import (when used standalone)
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
+    from device_utils import safe_cuda_call
 
 def node_zero_only(fn: Callable) -> Callable:
     @wraps(fn)

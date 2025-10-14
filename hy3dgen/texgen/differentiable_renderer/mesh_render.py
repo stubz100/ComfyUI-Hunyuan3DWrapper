@@ -30,10 +30,16 @@ import trimesh
 from PIL import Image
 import sys
 import os
+from pathlib import Path
 
-# Add parent directory to path to import device_utils
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../..')))
-from device_utils import get_device
+# Import cross-platform device utilities
+try:
+    # Try relative import first (when used as part of ComfyUI plugin)
+    from ....device_utils import get_device
+except (ImportError, ValueError):
+    # Fallback to absolute import (when used standalone)
+    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../..')))
+    from device_utils import get_device
 
 from .camera_utils import (
     transform_pos,

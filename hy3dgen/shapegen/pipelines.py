@@ -45,9 +45,14 @@ from accelerate.utils import set_module_tensor_to_device
 from comfy.utils import ProgressBar, load_torch_file
 import comfy.model_management as mm
 
-# Add parent directory to path to import device_utils
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-from device_utils import get_device
+# Import cross-platform device utilities
+try:
+    # Try relative import first (when used as part of ComfyUI plugin)
+    from ...device_utils import get_device
+except (ImportError, ValueError):
+    # Fallback to absolute import (when used standalone)
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+    from device_utils import get_device
 
 logger = logging.getLogger(__name__)
 

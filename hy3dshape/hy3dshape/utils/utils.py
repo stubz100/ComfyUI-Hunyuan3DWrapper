@@ -19,10 +19,15 @@ from functools import wraps
 import torch
 
 # Import cross-platform device utilities
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
-from device_utils import Timer
+try:
+    # Try relative import first (when used as part of ComfyUI plugin)
+    from ....device_utils import Timer
+except (ImportError, ValueError):
+    # Fallback to absolute import (when used standalone)
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
+    from device_utils import Timer
 
 
 def get_logger(name):
