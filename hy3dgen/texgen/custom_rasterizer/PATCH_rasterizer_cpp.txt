@@ -1,0 +1,45 @@
+/*
+ * Modified rasterizer.cpp with CPU_ONLY support
+ * Patch file to apply over original rasterizer.cpp
+ */
+
+// Add this at the top of rasterizer.cpp (after includes):
+
+#ifdef CPU_ONLY
+// CPU-only build: stub out GPU function
+std::vector<torch::Tensor> rasterize_image_gpu(torch::Tensor V, torch::Tensor F, torch::Tensor D,
+    int width, int height, float occlusion_truncation, int use_depth_prior)
+{
+    throw std::runtime_error("GPU rasterization not available in CPU-only build. "
+                           "Tensors should be on CPU, not CUDA device.");
+}
+#endif
+
+// Modify the rasterize_image function:
+
+std::vector<torch::Tensor> rasterize_image(torch::Tensor V, torch::Tensor F, torch::Tensor D,
+    int width, int height, float occlusion_truncation, int use_depth_prior)
+{
+#ifdef CPU_ONLY
+    // CPU-only build: force CPU path
+    if (V.get_device() != -1) {
+        throw std::runtime_error("CPU-only build detected CUDA tensor. "
+                               "Please move tensors to CPU with .cpu() before calling rasterize.");
+    }
+    return rasterize_image_cpu(V, F, D, width, height, occlusion_truncation, use_depth_prior);
+#else
+    // Original logic with GPU support
+    int device_id = V.get_device();
+    if (device_id == -1)
+        return rasterize_image_cpu(V, F, D, width, height, occlusion_truncation, use_depth_prior);
+    else
+        return rasterize_image_gpu(V, F, D, width, height, occlusion_truncation, use_depth_prior);
+#endif
+}
+
+// Change the include at the top:
+#ifdef CPU_ONLY
+#include "rasterizer_cpu.h"
+#else
+#include "rasterizer.h"
+#endif
