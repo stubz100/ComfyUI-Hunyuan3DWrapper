@@ -9,6 +9,8 @@ import json
 import trimesh as Trimesh
 from tqdm import tqdm
 
+from device_utils import safe_cuda_call
+
 from .hy3dgen.shapegen import Hunyuan3DDiTFlowMatchingPipeline, FaceReducer, FloaterRemover, DegenerateFaceRemover
 from .hy3dgen.texgen.hunyuanpaint.unet.modules import UNet2DConditionModel, UNet2p5DConditionModel
 from .hy3dgen.texgen.hunyuanpaint.pipeline import HunyuanPaintPipeline
@@ -1220,10 +1222,7 @@ class Hy3DGenerateMesh:
 
         pipeline.to(device)
 
-        try:
-            torch.cuda.reset_peak_memory_stats(device)
-        except:
-            pass
+        safe_cuda_call(lambda: torch.cuda.reset_peak_memory_stats(device))
 
         latents = pipeline(
             image=image, 
@@ -1233,10 +1232,7 @@ class Hy3DGenerateMesh:
             generator=torch.manual_seed(seed))
 
         print_memory(device)
-        try:
-            torch.cuda.reset_peak_memory_stats(device)
-        except:
-            pass
+        safe_cuda_call(lambda: torch.cuda.reset_peak_memory_stats(device))
         
         if not force_offload:
             pipeline.to(offload_device)
@@ -1306,10 +1302,7 @@ class Hy3DGenerateMeshMultiView():
         elif scheduler == "ConsistencyFlowMatchEulerDiscreteScheduler":
             scheduler = ConsistencyFlowMatchEulerDiscreteScheduler(num_train_timesteps=1000, pcm_timesteps=100)
 
-        try:
-            torch.cuda.reset_peak_memory_stats(device)
-        except:
-            pass
+        safe_cuda_call(lambda: torch.cuda.reset_peak_memory_stats(device))
 
         latents = pipeline(
             image=None, 
@@ -1320,10 +1313,7 @@ class Hy3DGenerateMeshMultiView():
             view_dict=view_dict)
 
         print_memory(device)
-        try:
-            torch.cuda.reset_peak_memory_stats(device)
-        except:
-            pass
+        safe_cuda_call(lambda: torch.cuda.reset_peak_memory_stats(device))
         
         images = []
         masks = []

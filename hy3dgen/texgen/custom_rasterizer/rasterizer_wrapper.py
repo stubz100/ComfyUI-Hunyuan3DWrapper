@@ -126,10 +126,11 @@ class RasterizerWrapper:
             # Test if CUDA is available
             if torch.cuda.is_available():
                 try:
-                    # Try GPU rasterization
-                    test_v = torch.rand(10, 4, device='cuda')
-                    test_f = torch.randint(0, 10, (5, 3), dtype=torch.int32, device='cuda')
-                    test_d = torch.zeros(0, device='cuda')
+                    # Try GPU rasterization - use detected device
+                    device = torch.device('cuda')
+                    test_v = torch.rand(10, 4, device=device)
+                    test_f = torch.randint(0, 10, (5, 3), dtype=torch.int32, device=device)
+                    test_d = torch.zeros(0, device=device)
                     cr.rasterize_image(test_v, test_f, test_d, 64, 64, 1e-6, 0)
                     self.mode = 'custom_rasterizer_cuda'
                     self.device = 'cuda'
@@ -253,10 +254,10 @@ class RasterizerWrapper:
             if clamp_depth is not None:
                 clamp_depth = clamp_depth.cpu()
         else:
-            pos = pos.cuda()
-            tri = tri.cuda()
+            pos = pos.to(self.device)
+            tri = tri.to(self.device)
             if clamp_depth is not None:
-                clamp_depth = clamp_depth.cuda()
+                clamp_depth = clamp_depth.to(self.device)
         
         if clamp_depth is None:
             clamp_depth = torch.zeros(0, device=pos.device)

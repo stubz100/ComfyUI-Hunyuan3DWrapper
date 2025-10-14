@@ -28,6 +28,12 @@ import torch
 import torch.nn.functional as F
 import trimesh
 from PIL import Image
+import sys
+import os
+
+# Add parent directory to path to import device_utils
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../..')))
+from device_utils import get_device
 
 from .camera_utils import (
     transform_pos,
@@ -133,8 +139,10 @@ class MeshRender():
         camera_distance=1.45, camera_type='orth',
         default_resolution=1024, texture_size=1024,
         use_antialias=True, max_mip_level=None, filter_mode='linear',
-        bake_mode='linear', raster_mode='cr', device='cuda', ortho_scale=1.2,):
+        bake_mode='linear', raster_mode='cr', device=None, ortho_scale=1.2,):
 
+        if device is None:
+            device = get_device()
         self.device = device
 
         self.set_default_render_resolution(default_resolution)
