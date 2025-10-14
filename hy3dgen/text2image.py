@@ -25,10 +25,16 @@
 
 import os
 import random
+import sys
+from pathlib import Path
 
 import numpy as np
 import torch
 from diffusers import AutoPipelineForText2Image
+
+# Add parent directory to path to import device_utils
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from device_utils import get_device
 
 
 def seed_everything(seed):
@@ -42,8 +48,10 @@ class HunyuanDiTPipeline:
     def __init__(
         self,
         model_path="Tencent-Hunyuan/HunyuanDiT-v1.1-Diffusers-Distilled",
-        device='cuda'
+        device=None
     ):
+        if device is None:
+            device = get_device()
         self.device = device
         self.pipe = AutoPipelineForText2Image.from_pretrained(
             model_path,

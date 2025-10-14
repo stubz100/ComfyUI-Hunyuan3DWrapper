@@ -1,11 +1,19 @@
 # -*- coding: utf-8 -*-
 import argparse
+import sys
+from pathlib import Path
 from omegaconf import OmegaConf
 import numpy as np
 import torch
 from .michelangelo.utils.misc import instantiate_from_config
 
-def load_surface(fp):
+# Add parent directory to path to import device_utils
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
+from device_utils import get_device
+
+def load_surface(fp, device=None):
+    if device is None:
+        device = get_device()
     
     with np.load(fp) as input_pc:
         surface = input_pc['points']
@@ -16,7 +24,7 @@ def load_surface(fp):
     surface = torch.FloatTensor(surface[ind])
     normal = torch.FloatTensor(normal[ind])
     
-    surface = torch.cat([surface, normal], dim=-1).unsqueeze(0).cuda()
+    surface = torch.cat([surface, normal], dim=-1).unsqueeze(0).to(device)
     
     return surface
 

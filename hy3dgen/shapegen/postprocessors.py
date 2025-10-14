@@ -14,6 +14,8 @@
 
 import tempfile
 import os
+import sys
+from pathlib import Path
 from typing import Union
 import torch
 import numpy as np
@@ -23,6 +25,10 @@ import trimesh
 from .models.autoencoders import Latent2MeshOutput
 
 import folder_paths
+
+# Add parent directory to path to import device_utils
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from device_utils import get_device, get_optimal_dtype
 
 
 def load_mesh(path):
@@ -174,11 +180,14 @@ def bpt_remesh(self, mesh: trimesh.Trimesh, verbose: bool = False, with_normal: 
         comfyui_dir = os.path.dirname(os.path.abspath(__file__)) 
         model_path = os.path.join(comfyui_dir, 'bpt/bpt-8-16-500m.pt')
         print(model_path)
-        model.load(model_path)
-        model = model.eval().cuda().half()
+        
+        # Auto-detect device
+        device = get_device()
+        dtype = get_optimal_dtype(device)
+        model = model.eval().to(device=device, dtype=dtype)
 
         import torch
-        pc_tensor = torch.from_numpy(pc_normal).cuda().half()
+        pc_tensor = torch.from_numpy(pc_normal).to(device=device, dtype=dtype)
         if len(pc_tensor.shape) == 2:
             pc_tensor = pc_tensor.unsqueeze(0)
 

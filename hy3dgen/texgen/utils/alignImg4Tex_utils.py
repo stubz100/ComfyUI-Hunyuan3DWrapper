@@ -24,9 +24,15 @@
 
 
 import torch
+import sys
+from pathlib import Path
 from diffusers import EulerAncestralDiscreteScheduler
 from diffusers import StableDiffusionControlNetPipeline, StableDiffusionXLControlNetImg2ImgPipeline, ControlNetModel, \
     AutoencoderKL
+
+# Add parent directory to path to import device_utils
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
+from device_utils import get_device
 
 
 class Img2img_Control_Ip_adapter:
@@ -80,7 +86,11 @@ class Img2img_Control_Ip_adapter:
 ################################################################
 
 class HesModel:
-    def __init__(self, ):
+    def __init__(self, device=None):
+        if device is None:
+            device = get_device()
+        self.device = device
+        
         controlnet_depth = ControlNetModel.from_pretrained(
             'diffusers/controlnet-depth-sdxl-1.0',
             torch_dtype=torch.float16,
@@ -101,7 +111,7 @@ class HesModel:
 
         self.pipe.load_ip_adapter('h94/IP-Adapter', subfolder="sdxl_models", weight_name="ip-adapter_sdxl.safetensors")
         self.pipe.set_ip_adapter_scale(0.7)
-        self.pipe.to("cuda")
+        self.pipe.to(self.device)
 
     def __call__(self,
                  init_image,

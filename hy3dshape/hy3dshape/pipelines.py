@@ -16,6 +16,8 @@ import copy
 import importlib
 import inspect
 import os
+import sys
+from pathlib import Path
 from typing import List, Optional, Union
 
 import numpy as np
@@ -33,6 +35,10 @@ from .utils import logger, synchronize_timer, smart_load_model
 
 from comfy.utils import ProgressBar, load_torch_file
 import comfy.model_management as mm
+
+# Add parent directory to path to import device_utils
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from device_utils import get_device
 
 
 def retrieve_timesteps(
@@ -144,11 +150,13 @@ class Hunyuan3DDiTPipeline:
         cls,
         ckpt_path,
         config_path,
-        device='cuda',
+        device=None,
         dtype=torch.float16,
         use_safetensors=None,
         **kwargs,
     ):
+        if device is None:
+            device = get_device()
         # load config
         with open(config_path, 'r') as f:
             config = yaml.safe_load(f)
@@ -205,13 +213,15 @@ class Hunyuan3DDiTPipeline:
     def from_pretrained(
         cls,
         model_path,
-        device='cuda',
+        device=None,
         dtype=torch.float16,
         use_safetensors=False,
         variant='fp16',
         subfolder='hunyuan3d-dit-v2-1',
         **kwargs,
     ):
+        if device is None:
+            device = get_device()
         kwargs['from_pretrained_kwargs'] = dict(
             model_path=model_path,
             subfolder=subfolder,
@@ -242,10 +252,12 @@ class Hunyuan3DDiTPipeline:
         scheduler,
         conditioner,
         image_processor,
-        device='cuda',
+        device=None,
         dtype=torch.float16,
         **kwargs
     ):
+        if device is None:
+            device = get_device()
         self.vae = vae
         self.model = model
         self.scheduler = scheduler

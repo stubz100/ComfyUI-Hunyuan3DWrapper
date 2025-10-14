@@ -24,6 +24,8 @@
 
 
 import os
+import sys
+from pathlib import Path
 from typing import Union, List
 
 import numpy as np
@@ -35,6 +37,10 @@ from .attention_blocks import FourierEmbedder, Transformer, CrossAttentionDecode
 from .surface_extractors import MCSurfaceExtractor, SurfaceExtractors
 from .volume_decoders import VanillaVolumeDecoder, FlashVDMVolumeDecoding, HierarchicalVolumeDecoding
 from ...utils import logger, synchronize_timer, smart_load_model
+
+# Add parent directory to path to import device_utils
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
+from device_utils import get_device
 
 
 class DiagonalGaussianDistribution(object):
@@ -123,11 +129,13 @@ class VectsetVAE(nn.Module):
         cls,
         ckpt_path,
         config_path,
-        device='cuda',
+        device=None,
         dtype=torch.float16,
         use_safetensors=None,
         **kwargs,
     ):
+        if device is None:
+            device = get_device()
         # load config
         with open(config_path, 'r') as f:
             config = yaml.safe_load(f)
@@ -157,13 +165,15 @@ class VectsetVAE(nn.Module):
     def from_pretrained(
         cls,
         model_path,
-        device='cuda',
+        device=None,
         dtype=torch.float16,
         use_safetensors=False,
         variant='fp16',
         subfolder='hunyuan3d-vae-v2-1',
         **kwargs,
     ):
+        if device is None:
+            device = get_device()
         config_path, ckpt_path = smart_load_model(
             model_path,
             subfolder=subfolder,
