@@ -24,6 +24,11 @@ from pytorch_lightning.callbacks import Callback
 
 from functools import wraps
 
+# Import cross-platform device utilities
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
+from device_utils import safe_cuda_call
+
 def node_zero_only(fn: Callable) -> Callable:
     @wraps(fn)
     def wrapped_fn(*args, **kwargs) -> Optional[Any]:
@@ -193,14 +198,18 @@ class ImageLogger(Callback):
 class CUDACallback(Callback):
     # see https://github.com/SeanNaren/minGPT/blob/master/mingpt/callback.py
     def on_train_epoch_start(self, trainer, pl_module):
-        # Reset the memory use counter
-        torch.cuda.reset_peak_memory_stats(trainer.root_gpu)
-        torch.cuda.synchronize(trainer.root_gpu)
+        # Reset the memory use counter - wrapped for cross-platform support
+        safe_cuda_call(lambda: torch.cuda.reset_peak_memory_stats(trainer.root_gpu))
+        safe_cuda_call(lambda: torch.cuda.synchronize(trainer.root_gpu))
         self.start_time = time.time()
 
     def on_train_epoch_end(self, trainer, pl_module, outputs):
-        torch.cuda.synchronize(trainer.root_gpu)
-        max_memory = torch.cuda.max_memory_allocated(trainer.root_gpu) / 2 ** 20
+        safe_cuda_call(lambda: torch.cuda.synchronize(trainer.root_gpu))
+        # Get max memory allocated, fallback to 0 if CUDA not available
+        max_memory = safe_cuda_call(
+            lambda: torch.cuda.max_memory_allocated(trainer.root_gpu) / 2 ** 20,
+            default=0.0
+        )
         epoch_time = time.time() - self.start_time
 
         try:

@@ -18,6 +18,12 @@ from functools import wraps
 
 import torch
 
+# Import cross-platform device utilities
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from device_utils import Timer
+
 
 def get_logger(name):
     logger = logging.getLogger(name)
@@ -60,17 +66,16 @@ class synchronize_timer:
     def __enter__(self):
         """Context manager entry: start timing."""
         if os.environ.get('HY3DGEN_DEBUG', '0') == '1':
-            self.start = torch.cuda.Event(enable_timing=True)
-            self.end = torch.cuda.Event(enable_timing=True)
-            self.start.record()
+            # Use cross-platform Timer class from device_utils
+            self.timer = Timer()
+            self.timer.start()
             return lambda: self.time
 
     def __exit__(self, exc_type, exc_value, exc_tb):
         """Context manager exit: stop timing and log results."""
         if os.environ.get('HY3DGEN_DEBUG', '0') == '1':
-            self.end.record()
-            torch.cuda.synchronize()
-            self.time = self.start.elapsed_time(self.end)
+            self.timer.end()
+            self.time = self.timer.elapsed_time()
             if self.name is not None:
                 logger.info(f'{self.name} takes {self.time} ms')
 
