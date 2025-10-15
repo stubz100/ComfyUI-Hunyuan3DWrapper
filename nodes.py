@@ -836,9 +836,20 @@ class Hy3DSampleMultiView:
         mm.unload_all_models()
         mm.soft_empty_cache()
         torch.manual_seed(seed)
-        generator=torch.Generator(device=pipeline.device).manual_seed(seed)
-
-        input_image = ref_image.permute(0, 3, 1, 2).unsqueeze(0).to(device)
+        
+        # Determine target device for inputs
+        # When CPU offload is enabled, use the pipeline's execution device (CPU initially)
+        # Otherwise use the main GPU device
+        if hasattr(pipeline, '_execution_device'):
+            # Use pipeline's execution device property
+            input_device = pipeline._execution_device
+        elif hasattr(pipeline, 'device'):
+            input_device = pipeline.device
+        else:
+            input_device = device
+        
+        generator=torch.Generator(device=input_device).manual_seed(seed)
+        input_image = ref_image.permute(0, 3, 1, 2).unsqueeze(0).to(input_device)
 
         device = mm.get_torch_device()
 
