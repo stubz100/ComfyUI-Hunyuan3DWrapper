@@ -333,7 +333,19 @@ class Hy3DDelightImage:
 
         device = mm.get_torch_device()
         offload_device = mm.unet_offload_device()
-        print("image in shape", image.shape)
+        
+        # Determine target device for inputs based on pipeline configuration
+        # When CPU offload is enabled, inputs should start on CPU
+        if hasattr(delight_pipe, '_execution_device'):
+            input_device = delight_pipe._execution_device
+        elif hasattr(delight_pipe, 'device'):
+            input_device = delight_pipe.device
+        else:
+            input_device = device
+        
+        print(f"Hy3DDelightImage: Using input device: {input_device}")
+        print(f"Image in shape: {image.shape}")
+        
         if scheduler is not None:
             if not hasattr(self, "default_scheduler"):
                 self.default_scheduler = delight_pipe.scheduler
@@ -342,16 +354,19 @@ class Hy3DDelightImage:
             if hasattr(self, "default_scheduler"):
                 delight_pipe.scheduler = self.default_scheduler
 
-        image = image.permute(0, 3, 1, 2).to(device)
+        # Move image to correct device (CPU for offloaded pipeline, GPU otherwise)
+        image = image.permute(0, 3, 1, 2).to(input_device)
         image = common_upscale(image, width, height, "lanczos", "disabled")
         
+        # Create generator on the correct device ONCE
+        generator = torch.Generator(device=input_device).manual_seed(seed)
 
         images_list = []
         for img in image:
             out = delight_pipe(
                 prompt="",
                 image=img,
-                generator=torch.manual_seed(seed),
+                generator=generator,  # Use the pre-created generator
                 height=height,
                 width=width,
                 num_inference_steps=steps,
@@ -838,15 +853,22 @@ class Hy3DSampleMultiView:
         torch.manual_seed(seed)
         
         # Determine target device for inputs
-        # When CPU offload is enabled, use the pipeline's execution device (CPU initially)
-        # Otherwise use the main GPU device
-        if hasattr(pipeline, '_execution_device'):
-            # Use pipeline's execution device property
+        # When CPU offload is enabled, inputs must be on CPU
+        # Check UNet device (most reliable indicator)
+        if hasattr(pipeline, 'unet') and hasattr(pipeline.unet, 'parameters'):
+            try:
+                input_device = next(pipeline.unet.parameters()).device
+                print(f"Hy3DSampleMultiView: Detected UNet on {input_device}, using that for inputs")
+            except StopIteration:
+                input_device = device
+        elif hasattr(pipeline, '_execution_device'):
             input_device = pipeline._execution_device
         elif hasattr(pipeline, 'device'):
             input_device = pipeline.device
         else:
             input_device = device
+        
+        print(f"Hy3DSampleMultiView: Using input device: {input_device}")
         
         generator=torch.Generator(device=input_device).manual_seed(seed)
         input_image = ref_image.permute(0, 3, 1, 2).unsqueeze(0).to(input_device)

@@ -95,12 +95,96 @@ class HunyuanPaintPipeline(StableDiffusionPipeline):
         B = images.shape[0]
         images = rearrange(images, 'b n c h w -> (b n) c h w')
 
+        # Get VAE's dtype (device may change during forward pass with CPU offload)
         dtype = next(self.vae.parameters()).dtype
+        vae_current_device = next(self.vae.parameters()).device
+        
+        print(f"[DEBUG encode_images] Input images device: {images.device}, dtype: {images.dtype}")
+        print(f"[DEBUG encode_images] VAE current device: {vae_current_device}, dtype: {dtype}")
+        
+        # COMPREHENSIVE DEVICE AUDIT - Check ALL VAE components
+        print(f"[DEBUG encode_images] === VAE Device Audit ===")
+        devices_found = {}
+        for name, param in self.vae.named_parameters():
+            dev = str(param.device)
+            if dev not in devices_found:
+                devices_found[dev] = []
+            devices_found[dev].append(f"param:{name}")
+        
+        for name, buffer in self.vae.named_buffers():
+            dev = str(buffer.device)
+            if dev not in devices_found:
+                devices_found[dev] = []
+            devices_found[dev].append(f"buffer:{name}")
+        
+        for device, items in devices_found.items():
+            print(f"  Device {device}: {len(items)} items")
+            if device != str(vae_current_device):
+                print(f"    ⚠️ MISMATCH! First 5 items: {items[:5]}")
+        
+        # Check specific encoder layers (where error occurs)
+        print(f"[DEBUG encode_images] === Encoder Layer Check ===")
+        if hasattr(self.vae, 'encoder'):
+            print(f"  Encoder device: {next(self.vae.encoder.parameters()).device}")
+            if hasattr(self.vae.encoder, 'conv_in'):
+                conv_in = self.vae.encoder.conv_in
+                print(f"  conv_in weight device: {conv_in.weight.device}")
+                if conv_in.bias is not None:
+                    print(f"  conv_in bias device: {conv_in.bias.device}")
+        
+        # Prepare images
         images = (images - 0.5) * 2.0
-        posterior = self.vae.encode(images.to(dtype)).latent_dist
-        latents = posterior.sample() * self.vae.config.scaling_factor
+        images = images.to(dtype=dtype)
+        
+        # CRITICAL FIX: With enable_model_cpu_offload(), offload hooks move VAE to GPU DURING forward pass
+        # We check device BEFORE the call, but hooks activate DURING the call
+        # Solution: Check if CPU offload is enabled by checking pipeline's _offload_dict or similar
+        # For now, use heuristic: if VAE on CPU but CUDA available, assume offload is active
+        
+        cpu_offload_active = (vae_current_device.type == 'cpu' and torch.cuda.is_available())
+        
+        if cpu_offload_active:
+            # CPU offload is active - VAE will be moved to GPU during encode, move images now
+            execution_device = torch.device('cuda:0')
+            print(f"[DEBUG encode_images] CPU offload detected (VAE on CPU, CUDA available)")
+            print(f"[DEBUG encode_images] Moving images from {images.device} to {execution_device}")
+            images = images.to(execution_device)
+        elif images.device != vae_current_device:
+            # No offload, but devices don't match - move images to match VAE
+            print(f"[DEBUG encode_images] No offload, moving images to match VAE: {vae_current_device}")
+            images = images.to(vae_current_device)
+        else:
+            print(f"[DEBUG encode_images] Devices aligned: {images.device}")
+        
+        print(f"[DEBUG encode_images] Images ready for encoding: {images.device}, {images.dtype}")
+        print(f"[DEBUG encode_images] Calling vae.encode()...")
+        
+        try:
+            # The VAE.encode() will trigger offload hooks that:
+            # 1. Move VAE encoder to GPU
+            # 2. Move input images to GPU (automatic via hooks)
+            # 3. Compute on GPU
+            # 4. Move VAE encoder back to CPU
+            # 5. Return results on GPU (or move to CPU depending on config)
+            posterior = self.vae.encode(images).latent_dist
+            latents = posterior.sample() * self.vae.config.scaling_factor
+            
+            print(f"[DEBUG encode_images] ✓ Encode successful!")
+            print(f"[DEBUG encode_images] Latents after encode: {latents.device}, {latents.dtype}")
+        except RuntimeError as e:
+            print(f"[DEBUG encode_images] ❌ Encode failed!")
+            print(f"[DEBUG encode_images] Error: {e}")
+            
+            # Post-error audit
+            print(f"[DEBUG encode_images] === Post-Error Device Check ===")
+            print(f"  Input images were on: {images.device}")
+            print(f"  VAE encoder now on: {next(self.vae.encoder.parameters()).device}")
+            print(f"  VAE encoder.conv_in weight on: {self.vae.encoder.conv_in.weight.device}")
+            raise
 
         latents = rearrange(latents, '(b n) c h w -> b n c h w', b=B)
+        
+        print(f"[DEBUG encode_images] Returning latents on device: {latents.device}")
         return latents
 
     @torch.no_grad()
@@ -132,8 +216,13 @@ class HunyuanPaintPipeline(StableDiffusionPipeline):
         batch_size = image.shape[0]
         assert batch_size == 1
         assert num_images_per_prompt == 1
+        
+        print(f"[DEBUG __call__] Input image device: {image.device}, dtype: {image.dtype}")
+        print(f"[DEBUG __call__] UNet device: {next(self.unet.parameters()).device}")
+        print(f"[DEBUG __call__] VAE device: {next(self.vae.parameters()).device}")
 
         ref_latents = self.encode_images(image)
+        print(f"[DEBUG __call__] ref_latents device after encode: {ref_latents.device}")
 
         def convert_pil_list_to_tensor(images):
             bg_c = [1., 1., 1.]
@@ -153,6 +242,7 @@ class HunyuanPaintPipeline(StableDiffusionPipeline):
                 images_tensor.append(view_imgs.unsqueeze(0))
 
             images_tensor = torch.cat(images_tensor, dim=0)
+            print(f"[DEBUG convert_pil] Created tensor on device: {images_tensor.device}")
             return images_tensor
 
         if "normal_imgs" in cached_condition:
@@ -173,13 +263,19 @@ class HunyuanPaintPipeline(StableDiffusionPipeline):
             camera_info = cached_condition['camera_info_gen']  # B,N
             if isinstance(camera_info, List):
                 camera_info = torch.tensor(camera_info)
-            camera_info = camera_info.to(image.device).to(torch.int64)
+            # Use ref_latents device instead of image.device (they may differ with CPU offload)
+            target_device = ref_latents.device
+            camera_info = camera_info.to(target_device).to(torch.int64)
+            print(f"[DEBUG] camera_info_gen moved to: {camera_info.device}")
             cached_condition['camera_info_gen'] = camera_info
         if 'camera_info_ref' in cached_condition:
             camera_info = cached_condition['camera_info_ref']  # B,N
             if isinstance(camera_info, List):
                 camera_info = torch.tensor(camera_info)
-            camera_info = camera_info.to(image.device).to(torch.int64)
+            # Use ref_latents device instead of image.device
+            target_device = ref_latents.device
+            camera_info = camera_info.to(target_device).to(torch.int64)
+            print(f"[DEBUG] camera_info_ref moved to: {camera_info.device}")
             cached_condition['camera_info_ref'] = camera_info
 
         cached_condition['ref_latents'] = ref_latents
